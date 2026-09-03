@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+  <meta name="theme-color" content="#08090c">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <title>Ricochet</title>
+  <link rel="stylesheet" href="/app.css">
+</head>
+<body>
+
+<section id="screen-connect" class="screen is-visible">
+  <div class="connect-inner">
+    <h1 class="brand">Ricochet</h1>
+    <p class="subtitle" id="connect-status">Connecting…</p>
+
+    <div id="code-entry" class="code-entry is-hidden">
+      <label for="code-input">Enter the code shown on the TV</label>
+      <input id="code-input" inputmode="numeric" pattern="[0-9]*" maxlength="6"
+             autocomplete="off" placeholder="000000">
+      <button id="code-submit" class="btn btn-primary">Join</button>
+    </div>
+
+    <p id="connect-error" class="error is-hidden" role="alert"></p>
+  </div>
+</section>
+
+<section id="screen-play" class="screen pad-screen">
+  <p class="rotate" id="rotate">Turn your phone sideways</p>
+  <div class="flash is-hidden" id="flash"></div>
+
+  <div class="dpad" id="dpad" aria-label="Drive">
+    <span class="arrow up">▲</span>
+    <span class="arrow left">◀</span>
+    <span class="arrow right">▶</span>
+    <span class="arrow down">▼</span>
+    <span class="dpad-label">DRIVE</span>
+  </div>
+
+  <div class="middle">
+    <p class="diag" id="diag">starting…</p>
+    <div class="lobby-buttons">
+      <button class="btn btn-mode" id="mode">Mode</button>
+      <button class="btn btn-mode" id="bots">Bots</button>
+      <button class="btn btn-mode" id="map">Map</button>
+    </div>
+  </div>
+
+  <button class="btn btn-fire" id="fire" aria-label="Fire">
+    <span class="btn-fire-letter">A</span>
+    <span class="btn-fire-word">FIRE</span>
+  </button>
+</section>
+
+<script type="module" src="/app.js"></script>
+</body>
+</html>

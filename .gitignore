@@ -1,0 +1,6 @@
+.build/
+.swiftpm/
+*.xcodeproj
+.DS_Store
+# Package.resolved IS committed: this is an application, not a library, so pinning the
+# exact AirPoint revision makes a checkout reproducible.

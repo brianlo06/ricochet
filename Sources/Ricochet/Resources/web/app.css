@@ -1,0 +1,121 @@
+/* Held sideways in both hands, in a dark room, while looking at a television — so the
+   phone is near-black, the pad and the trigger are where thumbs already are, and nothing
+   needs to be read to be used. */
+:root {
+  --bg: #08090c; --surface: #14161c; --line: #262b36; --raised: #1d2029;
+  --text: #e8eaf0; --dim: #868e9e; --accent: #4c8dff; --fire: #e5544b; --warn: #e5a13a;
+  --radius: 14px;
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body {
+  margin: 0; height: 100%; overscroll-behavior: none;
+  background: var(--bg); color: var(--text);
+  font: 15px/1.45 -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+}
+body {
+  touch-action: none; user-select: none; -webkit-user-select: none;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right)
+           env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+.screen { display: none; height: 100dvh; }
+.screen.is-visible { display: flex; flex-direction: column; gap: 10px; padding: 12px; }
+.is-hidden { display: none !important; }
+
+.connect-inner { margin: auto; padding: 24px; max-width: 420px; width: 100%; text-align: center; }
+.brand { font-size: 40px; font-weight: 700; letter-spacing: -0.03em; margin: 0 0 8px; }
+.subtitle { color: var(--dim); margin: 0 0 24px; }
+.error {
+  color: var(--fire); background: rgba(229,84,75,.1); border: 1px solid rgba(229,84,75,.3);
+  border-radius: var(--radius); padding: 12px 14px; margin-top: 20px; text-align: left;
+}
+.code-entry label { display: block; color: var(--dim); margin-bottom: 12px; }
+#code-input {
+  width: 100%; font-size: 40px; font-weight: 600; letter-spacing: .28em; text-align: center;
+  padding: 14px 0 14px .28em; margin-bottom: 14px; color: var(--text);
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+}
+.btn {
+  min-height: 56px; padding: 0 16px; font-size: 16px; font-weight: 600; color: var(--text);
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+  cursor: pointer; transition: transform 60ms ease, background 60ms ease;
+}
+.btn:active { transform: scale(.97); }
+.btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+/* The gamepad: pad on the left thumb, trigger on the right, everything else between. */
+.pad-screen.is-visible {
+  display: grid; flex-direction: unset;
+  grid-template-columns: 1fr minmax(96px, .8fr) 1fr;
+  grid-template-rows: auto 1fr; align-items: center;
+  gap: 12px; padding: 10px 16px;
+}
+/* The banner keeps its row whether or not it shows, or the controls, auto-placed into
+   the next row, would jump to the top when it hides. */
+.rotate {
+  grid-column: 1 / -1; grid-row: 1; margin: 0; text-align: center; color: var(--warn);
+  font-weight: 600; visibility: hidden; min-height: 1.4em;
+}
+@media (orientation: portrait) { .rotate { visibility: visible; } }
+.dpad, .middle, .btn-fire { grid-row: 2; }
+
+.dpad {
+  position: relative; justify-self: center; align-self: center;
+  width: min(62vh, 260px); aspect-ratio: 1; border-radius: 50%;
+  background: radial-gradient(circle, var(--raised) 0 18%, var(--surface) 19% 100%);
+  border: 1px solid var(--line); touch-action: none;
+}
+.dpad .arrow {
+  position: absolute; color: var(--dim); font-size: 30px; line-height: 1;
+  transform: translate(-50%, -50%); transition: color 60ms ease, transform 60ms ease;
+  pointer-events: none;
+}
+.dpad .up    { left: 50%; top: 16%; }
+.dpad .down  { left: 50%; top: 84%; }
+.dpad .left  { left: 16%; top: 50%; }
+.dpad .right { left: 84%; top: 50%; }
+.dpad-label {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  font-size: 11px; letter-spacing: .18em; color: var(--dim); pointer-events: none;
+}
+.dpad.is-up .up, .dpad.is-down .down, .dpad.is-left .left, .dpad.is-right .right {
+  color: var(--accent); transform: translate(-50%, -50%) scale(1.35);
+}
+.dpad.is-active { border-color: var(--accent); }
+
+.middle { display: flex; flex-direction: column; align-items: center; gap: 12px; min-width: 0; }
+.lobby-buttons { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
+.btn-mode { min-height: 44px; padding: 0 16px; font-size: 14px; }
+
+.btn-fire {
+  justify-self: center; align-self: center;
+  width: min(54vh, 220px); aspect-ratio: 1; border-radius: 50%;
+  background: var(--fire); border-color: var(--fire); color: #fff;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+  touch-action: none;
+}
+.btn-fire:active { background: #b83a32; }
+.btn-fire-letter { font-size: 52px; font-weight: 800; line-height: 1; }
+.btn-fire-word { font-size: 14px; letter-spacing: .18em; opacity: .85; }
+
+/* The flash: what just happened, for the glance down after being hit. */
+.flash {
+  position: fixed; left: 0; right: 0; top: 12%;
+  text-align: center; font-size: 40px; font-weight: 800; letter-spacing: -0.02em;
+  pointer-events: none; z-index: 40; opacity: 1; transition: opacity 180ms ease;
+}
+.flash.is-hidden { opacity: 0; }
+.flash.is-success { color: #35c46b; }
+.flash.is-failure { color: #e5544b; }
+.flash.is-warning { color: #e5a13a; }
+.flash.is-start   { color: #4c8dff; }
+.flash.is-finish  { color: #e8eaf0; }
+.flash.is-tick    { color: #868e9e; }
+.flash.is-info    { color: #868e9e; }
+
+.diag {
+  margin: 0; text-align: center; font: 11px/1.5 ui-monospace, Menlo, monospace;
+  color: var(--dim); font-variant-numeric: tabular-nums; overflow-wrap: anywhere;
+}
+.diag.is-bad { color: var(--warn); }
+
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }

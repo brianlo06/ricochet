@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - run: swift --version && node --version
+      - name: Build
+        run: swift build
+      - name: Game rules
+        run: swift test
+      # A real game process with a real TLS listener, joined by simulated gamepads.
+      - name: Join a running game
+        run: |
+          set -euo pipefail
+          STATE="$(mktemp -d)/ricochet"
+          ./.build/debug/ricochet --port 8445 --state-dir "$STATE" \
+            --bind 127.0.0.1 --auto-approve --log-level info > /tmp/ricochet.log 2>&1 &
+          GAME=$!
+          trap 'kill $GAME 2>/dev/null || true' EXIT
+          for _ in $(seq 1 80); do
+            if grep -q 'Pairing code:' /tmp/ricochet.log; then break; fi
+            sleep 0.25
+          done
+          CODE=$(grep -o 'Pairing code:  [0-9]*' /tmp/ricochet.log | tail -1 | awk '{print $3}')
+          if [ -z "$CODE" ]; then echo "game did not start"; cat /tmp/ricochet.log; exit 1; fi
+          node tools/smoke.mjs --code "$CODE" --port 8445 --players 3
+      - name: Game log on failure
+        if: failure()
+        run: cat /tmp/ricochet.log || true
