@@ -113,6 +113,7 @@ final class BotTests: XCTestCase {
         let arena = Arena(width: 1000, height: 600, walls: [],
                           spawns: [Vec2(x: 200, y: 300), Vec2(x: 700, y: 300)])
         let game = Game(arena: arena)
+        game.setDifficulty(.hard)
         let a = UUID()
         game.addPlayer(id: a, name: "A", at: 0)
         game.setBots(1, at: 0)
@@ -163,5 +164,71 @@ final class BotTests: XCTestCase {
             return game.players.values.sorted { $0.seat < $1.seat }.map(\.position)
         }
         XCTAssertEqual(play(), play())
+    }
+
+    // MARK: Difficulty
+
+    func testTheDefaultIsMediumAndTheLevelsGetHarderInOrder() {
+        XCTAssertEqual(Game(seed: 1).difficulty, .medium)
+        let levels = Difficulty.allCases.map(\.tuning)
+        for (easier, harder) in zip(levels, levels.dropFirst()) {
+            XCTAssertGreaterThanOrEqual(easier.aimError, harder.aimError)
+            XCTAssertGreaterThanOrEqual(easier.shotInterval.lowerBound, harder.shotInterval.lowerBound)
+            XCTAssertGreaterThanOrEqual(easier.reactionTime, harder.reactionTime)
+            XCTAssertLessThanOrEqual(easier.lead, harder.lead)
+            XCTAssertLessThanOrEqual(easier.dodgeChance, harder.dodgeChance)
+            XCTAssertLessThanOrEqual(easier.range, harder.range)
+        }
+        XCTAssertEqual(Difficulty.impossible.tuning.aimError, 0)
+        XCTAssertEqual(Difficulty.easy.tuning.dodgeHorizon, 0, "easy never dodges")
+        XCTAssertEqual(Difficulty.impossible.next, .easy, "the cycle wraps")
+    }
+
+    func testDifficultyCannotChangeMidRound() {
+        let game = Game(seed: 1)
+        let a = UUID()
+        game.addPlayer(id: a, name: "A", at: 0)
+        XCTAssertEqual(game.cycleDifficulty(), .hard)
+        _ = startRound(game)
+        XCTAssertFalse(game.setDifficulty(.easy))
+        XCTAssertNil(game.cycleDifficulty())
+        XCTAssertEqual(game.difficulty, .hard)
+    }
+
+    func testAnEasyBotIsSlowerAndWilderThanAHardOne() {
+        func shots(at level: Difficulty) -> (fired: Int, killed: Bool) {
+            let arena = Arena(width: 1000, height: 600, walls: [],
+                              spawns: [Vec2(x: 200, y: 300), Vec2(x: 700, y: 300)])
+            let game = Game(arena: arena)
+            game.setDifficulty(level)
+            let a = UUID()
+            game.addPlayer(id: a, name: "A", at: 0)
+            game.setBots(1, at: 0)
+            let began = startRound(game)
+            run(game, from: began, for: 6)
+            let bot = game.players.values.first { $0.isBot }!
+            return (bot.shots, game.players[a]!.deaths > 0)
+        }
+        let easy = shots(at: .easy)
+        let hard = shots(at: .hard)
+        let impossible = shots(at: .impossible)
+        XCTAssertLessThan(easy.fired, hard.fired, "an easy bot fires less often")
+        XCTAssertTrue(hard.killed && impossible.killed)
+    }
+
+    func testAnEasyBotStillComesToFindYou() {
+        // Out of its range, but it should close the distance rather than sit there.
+        let arena = Arena(width: 1600, height: 900, walls: [],
+                          spawns: [Vec2(x: 100, y: 450), Vec2(x: 1500, y: 450)])
+        let game = Game(arena: arena)
+        game.setDifficulty(.easy)
+        let a = UUID()
+        game.addPlayer(id: a, name: "A", at: 0)
+        game.setBots(1, at: 0)
+        let began = startRound(game)
+        let bot = game.players.values.first { $0.isBot }!
+        let before = bot.position.distance(to: game.players[a]!.position)
+        run(game, from: began, for: 3)
+        XCTAssertLessThan(game.players[bot.id]!.position.distance(to: game.players[a]!.position), before - 300)
     }
 }

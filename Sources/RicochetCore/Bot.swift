@@ -137,8 +137,10 @@ struct BotBrain {
     private var unstickTurn: Controls = .left
     private var nextShotAt: TimeInterval = -.infinity
     private var aimError: Double = 0
+    /// Shells this bot has decided not to bother about. Rolled once per shell, or a bot
+    /// that dodges half the time would re-roll every tenth of a second and dodge always.
+    private var ignoredShells: Set<UUID> = []
 
-    static let decisionInterval: TimeInterval = 0.1
     static let replanInterval: TimeInterval = 0.5
 
     init(seed: UInt64) {
@@ -148,7 +150,8 @@ struct BotBrain {
     /// What to hold and whether to fire, this tick.
     mutating func decide(for me: PlayerState, in game: Game, at now: TimeInterval) -> (Controls, fire: Bool) {
         guard now >= decideAt else { return (controls, false) }
-        decideAt = now + Self.decisionInterval
+        let tuning = game.difficulty.tuning
+        decideAt = now + tuning.reactionTime
         let settings = game.settings
         let radius = settings.tankRadius
 
@@ -171,8 +174,11 @@ struct BotBrain {
             return (controls, false)
         }
 
-        // Something coming: get out of its way before anything else.
-        if let away = incomingThreat(to: me, shells: game.shells, radius: radius + settings.shellRadius) {
+        // Something coming: get out of its way before anything else — if this bot is
+        // the kind that notices.
+        if tuning.dodgeHorizon > 0,
+           let away = incomingThreat(to: me, shells: game.shells, radius: radius + settings.shellRadius,
+                                     horizon: tuning.dodgeHorizon, chance: tuning.dodgeChance) {
             let diff = Self.wrap(away.heading - me.heading)
             controls = abs(diff) < .pi / 2
                 ? Self.steer(from: me.heading, to: away.heading, drive: 1, tolerance: 1.2)
@@ -193,13 +199,17 @@ struct BotBrain {
         }
 
         let distance = me.position.distance(to: target.position)
-        if game.hasLineOfSight(from: me.position, to: target.position) {
-            // Lead the shot by however far they will get while the shell is in the air,
-            // with a little error that changes each time so a bot is not a laser.
+        if distance <= tuning.range, game.hasLineOfSight(from: me.position, to: target.position) {
+            // Lead the shot by however far they will get while the shell is in the air —
+            // as much of that as this level allows for — with an error that changes each
+            // time so a bot is not a laser. On Impossible it is a laser.
             let velocity = Vec2(heading: target.heading)
                 * (settings.tankSpeed * game.effectiveControls(of: target, at: now).drive)
-            let aim = target.position + velocity * (distance / settings.shellSpeed)
-            if now >= nextShotAt { aimError = Double.random(in: -0.06...0.06, using: &rng) }
+            let aim = target.position + velocity * (distance / settings.shellSpeed * tuning.lead)
+            if now >= nextShotAt {
+                aimError = tuning.aimError > 0
+                    ? Double.random(in: -tuning.aimError...tuning.aimError, using: &rng) : 0
+            }
             let desired = Self.wrap((aim - me.position).heading + aimError)
             // Keep a fighting distance: close in on a distant target, back off from one
             // that is on top of you, hold otherwise.
@@ -209,7 +219,7 @@ struct BotBrain {
             var fire = false
             if aligned, now >= nextShotAt {
                 fire = true
-                nextShotAt = now + Double.random(in: 0.45...0.9, using: &rng)
+                nextShotAt = now + Double.random(in: tuning.shotInterval, using: &rng)
             }
             route.removeAll()
             return (controls, fire)
@@ -253,16 +263,22 @@ struct BotBrain {
 
     /// The direction to move to avoid the most imminent shell, or nil if nothing is
     /// coming. Closest-approach test: where will each shell be nearest to us, and when.
-    private func incomingThreat(to me: PlayerState, shells: [Shell], radius: Double) -> Vec2? {
+    private mutating func incomingThreat(to me: PlayerState, shells: [Shell], radius: Double,
+                                         horizon: Double, chance: Double) -> Vec2? {
         var soonest: (when: Double, away: Vec2)?
-        for shell in shells {
+        if ignoredShells.count > 64 { ignoredShells.removeAll() }
+        for shell in shells where !ignoredShells.contains(shell.id) {
             let relative = shell.position - me.position
             let speedSquared = shell.velocity.dot(shell.velocity)
             guard speedSquared > 0 else { continue }
             let when = -relative.dot(shell.velocity) / speedSquared
-            guard when > 0, when < 0.8 else { continue }
+            guard when > 0, when < horizon else { continue }
             let closest = relative + shell.velocity * when
             guard closest.length < radius + 34 else { continue }
+            if chance < 1, Double.random(in: 0..<1, using: &rng) >= chance {
+                ignoredShells.insert(shell.id)
+                continue
+            }
             if soonest == nil || when < soonest!.when {
                 // Step away from where it will pass. If it is dead on, step to one side.
                 var away = -closest

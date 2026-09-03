@@ -42,6 +42,7 @@ Alone? Press **Bots** on the phone (or **B** on the Mac) until you have company.
 --port <n>          TLS port (default 8445, one above Reticle so all three can run at once)
 --players <n>       Seats, 1–8 (default 4). Bots take the seats people leave
 --bots <n>          Bots to start with (default 0)
+--difficulty <l>    easy | medium | hard | impossible (default medium)
 --map <name>        One map every round instead of a random one
 --fullscreen        Start filling the screen. F toggles it.
 --mute              Start silent. M toggles it.
@@ -58,12 +59,13 @@ Alone? Press **Bots** on the phone (or **B** on the Mac) until you have company.
 | **A** in the lobby | Ready up. **A** on the results screen asks for another round. |
 | **Mode** | Cycle the rules. Refused mid-round. |
 | **Bots** | One more bot, wrapping round to none. Refused mid-round. |
+| **Skill** | How good the bots are: Easy, Medium, Hard, Impossible. Refused mid-round. |
 | **Map** | Another map for the next round. Refused mid-round. |
 | **Pause** | Stops the round where it is; press again to carry on. Nothing counts while paused. |
 | **End** | Ends the round now, scores as they stand. |
 
-The Mac keyboard has the same: **B** bots, **N** map, **P** pause, **E** end, **F**
-fullscreen, **M** mute.
+The Mac keyboard has the same: **B** bots, **D** difficulty, **N** map, **P** pause, **E**
+end, **F** fullscreen, **M** mute.
 
 Set up the room before you press FIRE: a lone player readying up starts the countdown at
 once, so add bots and pick a mode first. Bots can also be added on the results screen, for
@@ -86,6 +88,22 @@ its way through the maze. Anything coming its way, it steps out of — sideways 
 backwards if it must. It is not clever, and it is deliberately not a laser: every shot has
 a little error in it that changes each time. What makes it feel like an opponent rather
 than a turret is that it dodges and that it comes and finds you.
+
+There are four levels, and they are one brain with different numbers rather than four
+brains, so every level plans, shoots and dodges the same way and only the numbers change:
+
+| | Aim error | Between shots | Reaction | Leads a moving target | Dodges | Engages within |
+|---|---|---|---|---|---|---|
+| **Easy** | ±0.24 rad | 1.4–2.4 s | 0.3 s | no | never | 620 pts |
+| **Medium** (default) | ±0.13 rad | 0.9–1.6 s | 0.2 s | half | about half the time | 950 pts |
+| **Hard** | ±0.06 rad | 0.45–0.9 s | 0.1 s | fully | always | anywhere |
+| **Impossible** | none | 0.3–0.4 s | 0.05 s | fully | always, and sooner | anywhere |
+
+Hard is what the bots were before there were levels. A bot that decides not to dodge a
+shell stays decided about that shell, or a coin flipped ten times a second would always
+come up dodge. Change the level with **Skill** on the phone, **D** on the Mac, or
+`--difficulty`; it is refused mid-round, since a bot that gets worse when you are losing is
+a cheat.
 
 Every bot decision comes from the game's seeded generator, so a round with bots replays
 exactly from its seed and its button log, like a round without.

@@ -22,6 +22,7 @@ struct Options {
     var fullscreen = false
     var mute = false
     var bots = 0
+    var difficulty: Difficulty = .medium
     var map: Map?
 
     static let usage = """
@@ -32,6 +33,7 @@ struct Options {
       --port <n>          TLS port (default 8445)
       --players <n>       Seats, 1-8 (default 4). Bots take the seats people leave
       --bots <n>          Bots to start with (default 0). B adds one, on the Mac or the phone
+      --difficulty <l>    easy | medium | hard | impossible (default medium). D cycles it
       --map <name>        Play one map every round instead of a random one:
                           \(Map.allCases.map(\.rawValue).joined(separator: ", "))
       --state-dir <path>  TLS identity and trusted devices
@@ -79,6 +81,12 @@ struct Options {
                 options.mute = true
             case "--bots":
                 if let raw = value(), let count = Int(raw) { options.bots = max(0, count) }
+            case "--difficulty":
+                guard let raw = value(), let level = Difficulty(rawValue: raw.lowercased()) else {
+                    FileHandle.standardError.write(Data("ricochet: --difficulty must be one of \(Difficulty.allCases.map(\.rawValue).joined(separator: ", "))\n".utf8))
+                    exit(2)
+                }
+                options.difficulty = level
             case "--map":
                 guard let raw = value(), let map = Map(rawValue: raw.lowercased()) else {
                     FileHandle.standardError.write(Data("ricochet: --map must be one of \(Map.allCases.map(\.rawValue).joined(separator: ", "))\n".utf8))
@@ -146,6 +154,7 @@ let game = Game(settings: Mode.skirmish.settings,
                 mapPolicy: options.map.map { .fixed($0) } ?? .random)
 game.seatLimit = options.maxPlayers
 game.setBots(options.bots, at: Date().timeIntervalSince1970)
+game.setDifficulty(options.difficulty)
 let scene = GameScene(game: game, size: initialSize)
 let skView = SKView(frame: NSRect(origin: .zero, size: initialSize))
 skView.presentScene(scene)
@@ -196,6 +205,7 @@ if audio == nil { Log.warn("running without sound") }
 host.onCue = { [weak audio] cue in audio?.play(cue) }
 scene.onAddBot = { [weak host] in host?.addBot() }
 scene.onReshuffleMap = { [weak host] in host?.reshuffleMap() ?? false }
+scene.onCycleDifficulty = { [weak host] in host?.cycleDifficulty()?.title }
 scene.onTogglePause = { [weak host] in host?.togglePause() }
 scene.onEndRound = { [weak host] in host?.endRound() ?? false }
 scene.onToggleMute = { [weak audio] in

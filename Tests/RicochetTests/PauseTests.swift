@@ -84,6 +84,8 @@ final class PauseTests: XCTestCase {
     func testAnEliminationRoundEndsWhenTheLastPersonIsOutHoweverManyBotsRemain() {
         let game = Game(mapPolicy: .fixed(.crossfire), seed: 4)
         game.setMode(.lastStanding)
+        // Hard: this is a test of the ending rule, not of how long Medium takes to find you.
+        game.setDifficulty(.hard)
         let id = UUID()
         game.addPlayer(id: id, name: "A", at: 0)
         game.setBots(3, at: 0)

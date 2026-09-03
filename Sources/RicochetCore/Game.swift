@@ -138,6 +138,9 @@ public final class Game {
     /// How many bots were asked for. What actually plays is this or the free seats,
     /// whichever is fewer — see `botCount`.
     public private(set) var desiredBots = 0
+    /// How good the bots are. Medium by default: Hard is what the first players called
+    /// "a bit too good", and it is still there for them.
+    public private(set) var difficulty: Difficulty = .medium
 
     public struct Settings: Sendable {
         public var tankRadius: Double = 22
@@ -429,6 +432,20 @@ public final class Game {
     public func cycleBots(at now: TimeInterval) -> Int {
         setBots((botCount + 1) % (maxBots + 1), at: now)
         return botCount
+    }
+
+    /// Changes how good the bots are. Refused mid-round: bots that get worse when you are
+    /// losing is a cheat, and one that gets better is a complaint.
+    @discardableResult
+    public func setDifficulty(_ difficulty: Difficulty) -> Bool {
+        guard !phase.isInRound else { return false }
+        self.difficulty = difficulty
+        return true
+    }
+
+    /// The next level up, wrapping round to Easy. Returns it, or nil if refused.
+    public func cycleDifficulty() -> Difficulty? {
+        setDifficulty(difficulty.next) ? difficulty : nil
     }
 
     private func reconcileBots(at now: TimeInterval) {

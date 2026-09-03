@@ -57,7 +57,8 @@ public enum Scoreboard {
             } else if game.maxBots == 0 {
                 botLine = "Every seat is taken, so no bots"
             } else {
-                botLine = "Bots: \(bots) of up to \(game.maxBots)  ·  Bots on your phone adds one"
+                botLine = "Bots: \(bots) of up to \(game.maxBots)  ·  \(game.difficulty.title.uppercased())"
+                    + "  ·  Bots on your phone adds one, Skill changes the level"
             }
             return Screen(headline: headline, emphasis: .prompt,
                           body: "\(game.mode.title.uppercased())  ·  \(game.mode.summary)"

@@ -27,6 +27,8 @@ final class GameScene: SKScene {
     var onAddBot: (() -> Int?)?
     /// Another map, between rounds.
     var onReshuffleMap: (() -> Bool)?
+    /// The next bot difficulty, between rounds. Returns its name, or nil when refused.
+    var onCycleDifficulty: (() -> String?)?
     /// Pause or resume. Returns whether the round is now paused, or nil with no round.
     var onTogglePause: (() -> Bool?)?
     /// End the round with the scores as they stand.
@@ -137,6 +139,9 @@ final class GameScene: SKScene {
             announce(count == 0 ? "NO BOTS" : "\(count) BOT\(count == 1 ? "" : "S")")
         case "n":
             if onReshuffleMap?() != true { announce("NOT MID-ROUND") }
+        case "d":
+            guard let level = onCycleDifficulty?() else { return announce("NOT MID-ROUND") }
+            announce("BOTS: \(level.uppercased())")
         case "p":
             if onTogglePause?() == nil { announce("NO ROUND") }
         case "e", "\u{1B}":

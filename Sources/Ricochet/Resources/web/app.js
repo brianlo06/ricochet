@@ -374,6 +374,11 @@ class Controller {
       Cue.unlock();
       this.send('key_press', { key: 'b' });
     });
+    // D cycles how good the bots are: easy, medium, hard, impossible.
+    $('skill').addEventListener('click', () => {
+      Cue.unlock();
+      this.send('key_press', { key: 'd' });
+    });
     $('map').addEventListener('click', () => {
       Cue.unlock();
       this.send('key_press', { key: 'n' });

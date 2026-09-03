@@ -131,7 +131,7 @@ final class GameHost: RemoteSessionHandler {
     func features(for session: RemoteSession) -> [String] {
         // No pointer, no keyboard, no media: a gamepad. Advertising only what exists lets
         // the controller hide the rest rather than offering dead UI.
-        ["pad", "fire", "ready", "modes", "bots", "pause"]
+        ["pad", "fire", "ready", "modes", "bots", "difficulty", "pause"]
     }
 
     func displays(for session: RemoteSession) -> [DisplayInfo] {
@@ -200,6 +200,8 @@ final class GameHost: RemoteSessionHandler {
             if addBot() == nil { refuse("Not mid-round") }
         case .n:
             if !reshuffleMap() { refuse("Not mid-round") }
+        case .d:
+            if cycleDifficulty() == nil { refuse("Not mid-round") }
         case .p:
             if togglePause() == nil { refuse("No round to pause") }
         case .e, .escape:
@@ -224,6 +226,15 @@ final class GameHost: RemoteSessionHandler {
         guard game.endRoundEarly(at: Date().timeIntervalSince1970) else { return false }
         Log.info("round ended early")
         return true
+    }
+
+    /// The next difficulty up, wrapping round. Returns it, or nil if refused.
+    @discardableResult
+    func cycleDifficulty() -> Difficulty? {
+        guard let level = game.cycleDifficulty() else { return nil }
+        Log.info("bots: \(level.title) — \(level.summary)")
+        emit(CuePayload(kind: .info, intensity: 0.4, text: "Bots: \(level.title)"))
+        return level
     }
 
     /// One more bot, wrapping to none. Returns the new count, or nil if refused.
