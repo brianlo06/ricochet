@@ -203,9 +203,12 @@ struct BotBrain {
             // Lead the shot by however far they will get while the shell is in the air —
             // as much of that as this level allows for — with an error that changes each
             // time so a bot is not a laser. On Impossible it is a laser.
-            let velocity = Vec2(heading: target.heading)
-                * (settings.tankSpeed * game.effectiveControls(of: target, at: now).drive)
-            let aim = target.position + velocity * (distance / settings.shellSpeed * tuning.lead)
+            // Spelled out in steps: an older compiler could not type-check it as one
+            // expression, and the steps read better anyway.
+            let speed: Double = settings.tankSpeed * game.effectiveControls(of: target, at: now).drive
+            let velocity: Vec2 = Vec2(heading: target.heading) * speed
+            let leadTime: Double = distance / settings.shellSpeed * tuning.lead
+            let aim: Vec2 = target.position + velocity * leadTime
             if now >= nextShotAt {
                 aimError = tuning.aimError > 0
                     ? Double.random(in: -tuning.aimError...tuning.aimError, using: &rng) : 0
