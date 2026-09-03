@@ -39,7 +39,7 @@ struct Options {
       --auto-approve      Skip the approval prompt. Requires --bind 127.0.0.1.
       --fullscreen        Start filling the screen
       --mute              Start with the television silent (M toggles it)
-                          N picks another map between rounds
+                          N picks another map between rounds, P pauses, E ends a round
       --log-level <l>     debug | info | warn | error
       -h, --help          This help
 
@@ -196,6 +196,8 @@ if audio == nil { Log.warn("running without sound") }
 host.onCue = { [weak audio] cue in audio?.play(cue) }
 scene.onAddBot = { [weak host] in host?.addBot() }
 scene.onReshuffleMap = { [weak host] in host?.reshuffleMap() ?? false }
+scene.onTogglePause = { [weak host] in host?.togglePause() }
+scene.onEndRound = { [weak host] in host?.endRound() ?? false }
 scene.onToggleMute = { [weak audio] in
     guard let audio else { return nil }
     audio.isMuted.toggle()

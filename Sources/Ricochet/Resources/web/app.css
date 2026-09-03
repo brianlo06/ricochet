@@ -6,7 +6,9 @@
   --text: #e8eaf0; --dim: #868e9e; --accent: #4c8dff; --fire: #e5544b; --warn: #e5a13a;
   --radius: 14px;
 }
-* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+/* `manipulation` is the one touch-action value Safari honours for double-tap zoom, and
+   a pad that zooms when you fire twice is not a pad. The d-pad opts out of everything. */
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
 html, body {
   margin: 0; height: 100%; overscroll-behavior: none;
   background: var(--bg); color: var(--text);
@@ -92,6 +94,7 @@ body {
 .middle { display: flex; flex-direction: column; align-items: center; gap: 12px; min-width: 0; }
 .lobby-buttons { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
 .btn-mode { min-height: 44px; padding: 0 16px; font-size: 14px; }
+.btn-end { color: var(--fire); border-color: rgba(229,84,75,.5); }
 
 .btn-fire {
   justify-self: center; align-self: center;

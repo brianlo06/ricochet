@@ -93,7 +93,10 @@ public enum Feedback {
         case .countdown:
             return CuePayload(kind: .info, intensity: 0.5, text: "Get ready")
         case .playing:
+            if case .paused = previous { return CuePayload(kind: .info, intensity: 0.5, text: "Resumed") }
             return CuePayload(kind: .start, intensity: 0.9, text: "GO")
+        case .paused:
+            return CuePayload(kind: .info, intensity: 0.5, text: "Paused")
         case .results:
             return CuePayload(kind: .finish, intensity: 0.8, text: "Round over")
         case .lobby:

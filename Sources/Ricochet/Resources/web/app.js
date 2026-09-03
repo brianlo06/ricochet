@@ -378,6 +378,17 @@ class Controller {
       Cue.unlock();
       this.send('key_press', { key: 'n' });
     });
+    // P pauses or resumes, E ends the round with the scores as they stand. Both do
+    // nothing outside a round, and the host says so.
+    $('pause').addEventListener('click', () => {
+      Cue.unlock();
+      this.send('key_press', { key: 'p' });
+    });
+    $('end').addEventListener('click', () => {
+      Cue.unlock();
+      this.pad.releaseAll();
+      this.send('key_press', { key: 'e' });
+    });
 
     document.addEventListener('visibilitychange', () => {
       if (document.hidden) this.pad.releaseAll();
@@ -385,6 +396,17 @@ class Controller {
     });
     window.addEventListener('blur', () => this.pad.releaseAll());
     document.addEventListener('gesturestart', (event) => event.preventDefault());
+
+    // iOS zooms on a double tap, and `user-scalable=no` has been ignored since iOS 10.
+    // Two taps inside 300ms is a player firing, not a request to zoom, so the second
+    // one's default is refused. Belt and braces with touch-action: manipulation above.
+    let lastTouchEndAt = 0;
+    document.addEventListener('touchend', (event) => {
+      const now = Date.now();
+      if (now - lastTouchEndAt < 300) event.preventDefault();
+      lastTouchEndAt = now;
+    }, { passive: false });
+    document.addEventListener('dblclick', (event) => event.preventDefault(), { passive: false });
   }
 }
 

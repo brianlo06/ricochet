@@ -27,6 +27,10 @@ final class GameScene: SKScene {
     var onAddBot: (() -> Int?)?
     /// Another map, between rounds.
     var onReshuffleMap: (() -> Bool)?
+    /// Pause or resume. Returns whether the round is now paused, or nil with no round.
+    var onTogglePause: (() -> Bool?)?
+    /// End the round with the scores as they stand.
+    var onEndRound: (() -> Bool)?
 
     var joinHint: String = "" {
         didSet { hud.hint = joinHint }
@@ -133,6 +137,10 @@ final class GameScene: SKScene {
             announce(count == 0 ? "NO BOTS" : "\(count) BOT\(count == 1 ? "" : "S")")
         case "n":
             if onReshuffleMap?() != true { announce("NOT MID-ROUND") }
+        case "p":
+            if onTogglePause?() == nil { announce("NO ROUND") }
+        case "e", "\u{1B}":
+            if onEndRound?() != true { announce("NO ROUND") }
         default:
             super.keyDown(with: event)
         }

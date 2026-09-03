@@ -238,7 +238,7 @@ public final class Game {
     /// would invalidate the scores it is about to report.
     @discardableResult
     public func setMode(_ mode: Mode) -> Bool {
-        guard !phase.isPlaying else { return false }
+        guard !phase.isInRound else { return false }
         self.mode = mode
         self.settings = mode.settings
         return true
@@ -255,7 +255,7 @@ public final class Game {
     /// Picks the next map under the policy and puts everyone on it. Refused mid-round.
     @discardableResult
     public func reshuffleMap() -> Bool {
-        guard !phase.isPlaying else { return false }
+        guard !phase.isInRound else { return false }
         if case .fixed(let current) = mapPolicy {
             let all = Map.allCases
             let next = all[((all.firstIndex(of: current) ?? 0) + 1) % all.count]
@@ -356,10 +356,63 @@ public final class Game {
         reconcileBots(at: lastTickAt ?? 0)
         // If the last person leaves mid-round, drop back to the lobby rather than running
         // a match nobody is in. Bots do not count as somebody.
-        if humanCount == 0, phase.isPlaying || phase == .lobby {
+        if humanCount == 0, phase.isInRound || phase == .lobby {
             shells.removeAll()
             phase = .lobby
         }
+    }
+
+    // MARK: - Pausing and ending
+
+    /// Stops the round where it is. Everything with a deadline — the round, shells,
+    /// respawns, shields, gates — is pushed on by the length of the pause when it resumes,
+    /// so a pause is invisible to the rules. Refused outside a round.
+    @discardableResult
+    public func pause(at now: TimeInterval) -> Bool {
+        guard phase.isPlaying else { return false }
+        phase = .paused(resuming: phase, since: now)
+        return true
+    }
+
+    @discardableResult
+    public func resume(at now: TimeInterval) -> Bool {
+        guard case .paused(let resuming, let since) = phase else { return false }
+        let gap = max(0, now - since)
+        if case .playing(let endsAt) = resuming {
+            phase = .playing(endsAt: endsAt + gap)
+        } else {
+            phase = resuming
+        }
+        shells = shells.map { shell in
+            Shell(id: shell.id, owner: shell.owner, position: shell.position,
+                  velocity: shell.velocity, bouncesLeft: shell.bouncesLeft,
+                  firedAt: shell.firedAt + gap, expiresAt: shell.expiresAt + gap)
+        }
+        for (id, player) in players {
+            var moved = player
+            if let due = moved.respawnAt { moved.respawnAt = due + gap }
+            if moved.shieldedUntil > since { moved.shieldedUntil += gap }
+            players[id] = moved
+        }
+        for id in lastShotAt.keys { lastShotAt[id]! += gap }
+        if let started = arenaStartedAt { arenaStartedAt = started + gap }
+        return true
+    }
+
+    /// Pauses a running round, resumes a paused one. Returns the new state, or nil if
+    /// there is no round to do either to.
+    public func togglePause(at now: TimeInterval) -> Bool? {
+        if phase.isPlaying { pause(at: now); return true }
+        if phase.isPaused { resume(at: now); return false }
+        return nil
+    }
+
+    /// Ends the round now, scores as they stand. Refused outside a round.
+    @discardableResult
+    public func endRoundEarly(at now: TimeInterval) -> Bool {
+        guard phase.isInRound else { return false }
+        endRound(at: now)
+        return true
     }
 
     // MARK: Bots
@@ -436,7 +489,7 @@ public final class Game {
             let ready = !(players[id]?.isReady ?? false)
             players[id]?.isReady = ready
             return .readied(ready)
-        case .countdown:
+        case .countdown, .paused:
             return .ignored
         }
     }
@@ -477,10 +530,13 @@ public final class Game {
         var events = pendingEvents
         pendingEvents.removeAll()
 
-        // Everyone out — or everyone but one — ends an elimination round early.
+        // Everyone out — or everyone but one — ends an elimination round early. So does
+        // every person being out: bots fighting each other is nothing to watch, and the
+        // people watching it cannot do anything but wait.
         if phase.isPlaying, settings.lives > 0, !players.isEmpty {
             let standing = players.values.filter { !$0.isEliminated }.count
-            if standing <= (players.count >= 2 ? 1 : 0) {
+            let peopleStanding = players.values.filter { !$0.isBot && !$0.isEliminated }.count
+            if standing <= (players.count >= 2 ? 1 : 0) || peopleStanding == 0 {
                 endRound(at: now)
                 return events
             }
@@ -491,6 +547,8 @@ public final class Game {
         // A long gap means the app was occluded or the machine slept. Simulating it would
         // fling every shell across the arena; skipping it loses nothing anyone saw.
         guard remaining > 0, remaining < 0.25 else { return events }
+
+        guard !phase.isPaused else { return events }
 
         var clock = last
         while remaining > 0 {
@@ -531,6 +589,9 @@ public final class Game {
             phase = .lobby
             for (id, player) in players where !player.isBot { players[id]?.isReady = false }
             pickMap(announcing: true)
+
+        case .paused:
+            break   // time does not pass
         }
     }
 
@@ -576,6 +637,10 @@ public final class Game {
         case .countdown(let at): return max(at - now, 0)
         case .playing(let at): return max(at - now, 0)
         case .results(let at): return max(at - now, 0)
+        case .paused(let resuming, let since):
+            // Frozen at the moment of the pause.
+            if case .playing(let at) = resuming { return max(at - since, 0) }
+            return nil
         }
     }
 

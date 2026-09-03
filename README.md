@@ -59,6 +59,16 @@ Alone? Press **Bots** on the phone (or **B** on the Mac) until you have company.
 | **Mode** | Cycle the rules. Refused mid-round. |
 | **Bots** | One more bot, wrapping round to none. Refused mid-round. |
 | **Map** | Another map for the next round. Refused mid-round. |
+| **Pause** | Stops the round where it is; press again to carry on. Nothing counts while paused. |
+| **End** | Ends the round now, scores as they stand. |
+
+The Mac keyboard has the same: **B** bots, **N** map, **P** pause, **E** end, **F**
+fullscreen, **M** mute.
+
+Set up the room before you press FIRE: a lone player readying up starts the countdown at
+once, so add bots and pick a mode first. Bots can also be added on the results screen, for
+the next round. In Last Tank Standing the round ends when the last person is out, however
+many bots are still standing — bots fighting each other is nothing to watch.
 
 You can drive around in the lobby while the others join. Everything on the map works in
 the lobby too — the sweeper sweeps, the pits are pits — but nothing counts.

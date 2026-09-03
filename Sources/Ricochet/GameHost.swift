@@ -89,7 +89,7 @@ final class GameHost: RemoteSessionHandler {
             if let cue = Feedback.countdownTick(secondsLeft: second) { emit(cue) }
         case .playing:
             if let cue = Feedback.roundEndingTick(secondsLeft: second) { emit(cue) }
-        case .lobby, .results:
+        case .lobby, .results, .paused:
             break
         }
     }
@@ -106,6 +106,8 @@ final class GameHost: RemoteSessionHandler {
         if let cue = Feedback.cue(movingTo: phase, from: previous) { emit(cue) }
 
         switch phase {
+        case .paused:
+            Log.info("paused")
         case .lobby:
             let waiting = game.players.values.filter { !$0.isReady }.count
             Log.info(game.players.isEmpty
@@ -129,7 +131,7 @@ final class GameHost: RemoteSessionHandler {
     func features(for session: RemoteSession) -> [String] {
         // No pointer, no keyboard, no media: a gamepad. Advertising only what exists lets
         // the controller hide the rest rather than offering dead UI.
-        ["pad", "fire", "ready", "modes", "bots"]
+        ["pad", "fire", "ready", "modes", "bots", "pause"]
     }
 
     func displays(for session: RemoteSession) -> [DisplayInfo] {
@@ -188,25 +190,46 @@ final class GameHost: RemoteSessionHandler {
         return controls
     }
 
-    /// The lobby's two extra buttons, shared with the Mac keyboard.
+    /// The lettered buttons, shared with the Mac keyboard: B bots, N map, P pause, E end.
     func handleLobbyKey(_ key: KeyName, from session: RemoteSession?) {
+        func refuse(_ text: String) {
+            if let session { emit(CuePayload(kind: .failure, intensity: 0.3, text: text), to: session.id) }
+        }
         switch key {
         case .b:
-            let count = addBot()
-            if count == nil, let session { emit(CuePayload(kind: .failure, intensity: 0.3, text: "Not mid-round"), to: session.id) }
+            if addBot() == nil { refuse("Not mid-round") }
         case .n:
-            if !reshuffleMap(), let session {
-                emit(CuePayload(kind: .failure, intensity: 0.3, text: "Not mid-round"), to: session.id)
-            }
+            if !reshuffleMap() { refuse("Not mid-round") }
+        case .p:
+            if togglePause() == nil { refuse("No round to pause") }
+        case .e, .escape:
+            if !endRound() { refuse("No round to end") }
         default:
             break
         }
     }
 
+    /// Pauses or resumes. Returns whether the round is now paused, or nil if there is no
+    /// round. The cue comes from the phase change.
+    @discardableResult
+    func togglePause() -> Bool? {
+        let paused = game.togglePause(at: Date().timeIntervalSince1970)
+        if let paused { Log.info(paused ? "paused" : "resumed") }
+        return paused
+    }
+
+    /// Ends the round with the scores as they stand.
+    @discardableResult
+    func endRound() -> Bool {
+        guard game.endRoundEarly(at: Date().timeIntervalSince1970) else { return false }
+        Log.info("round ended early")
+        return true
+    }
+
     /// One more bot, wrapping to none. Returns the new count, or nil if refused.
     @discardableResult
     func addBot() -> Int? {
-        guard !game.phase.isPlaying else { return nil }
+        guard !game.phase.isInRound else { return nil }
         let count = game.cycleBots(at: Date().timeIntervalSince1970)
         Log.info("bots: \(count) of up to \(game.maxBots)")
         emit(CuePayload(kind: .info, intensity: 0.4, text: count == 0 ? "No bots" : "\(count) bot\(count == 1 ? "" : "s")"))

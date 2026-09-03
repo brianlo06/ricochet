@@ -75,6 +75,13 @@ public enum Scoreboard {
                           clock: String(format: "%d:%02d", left / 60, left % 60),
                           isUrgent: left <= urgentSeconds, showsJoinPanel: false)
 
+        case .paused:
+            return Screen(headline: "PAUSED", emphasis: .verdict,
+                          body: "Pause on a phone, or P on the Mac, to carry on"
+                              + "\nEnd on a phone, or E on the Mac, to end the round",
+                          clock: String(format: "%d:%02d", left / 60, left % 60),
+                          isUrgent: false, showsJoinPanel: false)
+
         case .results:
             // There is always at least one row: the last player to leave a round drops the
             // game back to the lobby rather than finishing it.

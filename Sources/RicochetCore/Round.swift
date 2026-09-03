@@ -13,11 +13,24 @@ public enum Phase: Equatable, Sendable {
     case playing(endsAt: TimeInterval)
     /// Final scores are on screen until `until`, then back to the lobby.
     case results(until: TimeInterval)
+    /// A round stopped mid-way. `resuming` is the phase to go back to, with its deadline
+    /// as it stood when the pause began; `since` is when that was, so the deadline can be
+    /// pushed on by however long the pause lasted.
+    indirect case paused(resuming: Phase, since: TimeInterval)
 
     public var isPlaying: Bool {
         if case .playing = self { return true }
         return false
     }
+
+    public var isPaused: Bool {
+        if case .paused = self { return true }
+        return false
+    }
+
+    /// Playing or paused: a round is under way and its scores are live, so the rules it
+    /// is being played under must not change.
+    public var isInRound: Bool { isPlaying || isPaused }
 }
 
 /// Why a trigger pull did not fire a shell.
