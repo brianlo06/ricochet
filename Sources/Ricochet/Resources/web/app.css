@@ -47,20 +47,27 @@ body {
   display: grid; flex-direction: unset;
   grid-template-columns: 1fr minmax(96px, .8fr) 1fr;
   grid-template-rows: auto 1fr; align-items: center;
-  gap: 12px; padding: 10px 16px;
+  gap: 12px; padding: 14px 24px;
 }
-/* The banner keeps its row whether or not it shows, or the controls, auto-placed into
-   the next row, would jump to the top when it hides. */
-.rotate {
-  grid-column: 1 / -1; grid-row: 1; margin: 0; text-align: center; color: var(--warn);
-  font-weight: 600; visibility: hidden; min-height: 1.4em;
+/* Landscape whether or not the phone agrees. Most phones have rotation lock on, and a
+   pad that only works with it off is a pad that does not work. In a portrait viewport
+   the whole play screen is turned on its side and sized to the transposed viewport, so
+   the player holds the phone like a video and the browser is none the wiser. */
+@media (orientation: portrait) {
+  .pad-screen.is-visible {
+    position: fixed; top: 0; left: 0;
+    width: 100dvh; height: 100dvw;
+    transform-origin: 0 0;
+    transform: rotate(90deg) translateY(-100dvw);
+    padding: 20px 28px;
+  }
 }
-@media (orientation: portrait) { .rotate { visibility: visible; } }
+.rotate { display: none; }
 .dpad, .middle, .btn-fire { grid-row: 2; }
 
 .dpad {
   position: relative; justify-self: center; align-self: center;
-  width: min(62vh, 260px); aspect-ratio: 1; border-radius: 50%;
+  width: min(64vmin, 260px); aspect-ratio: 1; border-radius: 50%;
   background: radial-gradient(circle, var(--raised) 0 18%, var(--surface) 19% 100%);
   border: 1px solid var(--line); touch-action: none;
 }
@@ -88,14 +95,16 @@ body {
 
 .btn-fire {
   justify-self: center; align-self: center;
-  width: min(54vh, 220px); aspect-ratio: 1; border-radius: 50%;
-  background: var(--fire); border-color: var(--fire); color: #fff;
-  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+  width: min(58vmin, 230px); aspect-ratio: 1; border-radius: 50%;
+  background: radial-gradient(circle at 40% 35%, #f07a70, var(--fire) 60%, #b83a32);
+  border: 3px solid #ff9a90; color: #fff;
+  box-shadow: 0 0 0 6px rgba(229,84,75,.18), 0 8px 24px rgba(229,84,75,.35);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
   touch-action: none;
 }
-.btn-fire:active { background: #b83a32; }
-.btn-fire-letter { font-size: 52px; font-weight: 800; line-height: 1; }
-.btn-fire-word { font-size: 14px; letter-spacing: .18em; opacity: .85; }
+.btn-fire:active { background: #b83a32; transform: scale(.94); box-shadow: 0 0 0 10px rgba(229,84,75,.25); }
+.btn-fire-word { font-size: 34px; font-weight: 900; letter-spacing: .12em; line-height: 1; }
+.btn-fire-letter { font-size: 15px; font-weight: 700; opacity: .8; letter-spacing: .1em; }
 
 /* The flash: what just happened, for the glance down after being hit. */
 .flash {

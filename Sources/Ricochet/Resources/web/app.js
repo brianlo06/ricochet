@@ -150,8 +150,14 @@ class Pad {
 
   _directions(event) {
     const rect = this.element.getBoundingClientRect();
-    const dx = event.clientX - (rect.left + rect.width / 2);
-    const dy = -(event.clientY - (rect.top + rect.height / 2));
+    // Page coordinates, y downward. When the play screen has been turned on its side
+    // for a portrait viewport, the pad's "up" is the page's right, so the touch is
+    // turned back the other way before it is read.
+    let px = event.clientX - (rect.left + rect.width / 2);
+    let py = event.clientY - (rect.top + rect.height / 2);
+    if (Pad.isRotated) [px, py] = [py, -px];
+    const dx = px;
+    const dy = -py;
     // A dead zone in the middle, so resting a thumb is not a direction.
     if (Math.hypot(dx, dy) < rect.width * 0.09) return [];
     const degrees = (Math.atan2(dy, dx) * 180 / Math.PI + 360) % 360;
@@ -172,6 +178,12 @@ class Pad {
     for (const d of ['up', 'down', 'left', 'right']) this.element.classList.toggle(`is-${d}`, union.has(d));
     this.element.classList.toggle('is-active', held.length > 0);
     this.onChange(held);
+  }
+
+  /// Whether the stylesheet has turned the play screen on its side. Mirrors the media
+  /// query there; the two must agree or the pad steers ninety degrees off.
+  static get isRotated() {
+    return window.matchMedia('(orientation: portrait)').matches;
   }
 
   /// Everything let go, whether or not the browser told us. Used when the page hides:
@@ -266,6 +278,9 @@ class Controller {
       $('screen-play').classList.add('is-visible');
       this._startLoops();
       this._keepAwake();
+      // Where the browser allows it, hold landscape. Where it does not — Safari — the
+      // stylesheet turns the page on its side instead, so this is a courtesy.
+      try { screen.orientation?.lock?.('landscape').catch(() => {}); } catch {}
       // A reconnect mid-press: tell the new session what is still held.
       if (this.pad.held.length) this._sendPad(this.pad.held);
     } else if (message.t === 'cue') {

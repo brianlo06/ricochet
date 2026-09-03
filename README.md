@@ -32,7 +32,9 @@ six-digit code. On each player's phone:
    because it runs on your machine rather than a public server. *Show Details* →
    *visit this website*.
 3. Approve the player in the terminal.
-4. **Turn the phone sideways.** Drive with the pad, press **A** to fire.
+4. **Turn the phone sideways**, like watching a video. The page turns itself whether or
+   not rotation lock is on. Drive with the pad under your left thumb, tap **FIRE** under
+   your right.
 
 Alone? Press **Bots** on the phone (or **B** on the Mac) until you have company.
 
