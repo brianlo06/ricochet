@@ -37,11 +37,15 @@ final class ScoreboardTests: XCTestCase {
     func testARowShowsLivesOnlyWhenTheyAreFinite() {
         var player = PlayerState(id: UUID(), seat: 0, name: "Ada", position: .zero, heading: 0)
         player.kills = 2
-        XCTAssertEqual(Scoreboard.row(for: player), "Ada   2")
+        player.lifetimePoints = 7
+        XCTAssertEqual(Scoreboard.row(for: player), "Ada   2   Cannon ★7")
         player.livesLeft = 2
-        XCTAssertEqual(Scoreboard.row(for: player), "Ada   2   ♥♥")
+        XCTAssertEqual(Scoreboard.row(for: player), "Ada   2   ♥♥   Cannon ★7")
         player.isEliminated = true
-        XCTAssertEqual(Scoreboard.row(for: player), "Ada   2   OUT")
+        XCTAssertEqual(Scoreboard.row(for: player), "Ada   2   OUT   Cannon ★7")
+        var bot = PlayerState(id: UUID(), seat: 1, name: "Rusty", position: .zero, heading: 0)
+        bot.isBot = true
+        XCTAssertEqual(Scoreboard.row(for: bot), "Rusty ·bot   0   Cannon", "bots show no lifetime score")
     }
 
     func testResultsListEveryoneWithOwnGoalsOnlyWhenTheyHappened() {

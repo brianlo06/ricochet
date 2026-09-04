@@ -13,7 +13,7 @@ let package = Package(
         // game adds a handler and a scene; it reimplements none of that. 0.4 is the release
         // that added `pad_state`, which this game needed and which did not exist until it
         // was built.
-        .package(url: "https://github.com/brianlo06/airpoint.git", .upToNextMinor(from: "0.4.0")),
+        .package(url: "https://github.com/brianlo06/airpoint.git", .upToNextMinor(from: "0.4.1")),
     ],
     targets: [
         // Game rules, deliberately free of SpriteKit and of the network, so a whole match

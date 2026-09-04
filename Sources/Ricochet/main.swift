@@ -192,7 +192,10 @@ let occlusionObserver = NotificationCenter.default.addObserver(
 
 // MARK: - Server
 
-let host = GameHost(game: game)
+// Lifetime scores and guns, by phone, kept beside the TLS identity.
+let progress = Progress(directory: options.stateDirectory)
+if progress.count > 0 { Log.info("progress on file for \(progress.count) phone\(progress.count == 1 ? "" : "s")") }
+let host = GameHost(game: game, progress: progress)
 host.onTrigger = { [weak scene] id, result in scene?.showTrigger(player: id, result: result) }
 scene.onFrame = { [weak host] in host?.logPhaseChanges() }
 scene.onEvents = { [weak host] events in host?.report(events) }

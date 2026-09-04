@@ -13,6 +13,10 @@ import RicochetCore
 final class GameHost: RemoteSessionHandler {
 
     private let game: Game
+    /// Scores and guns, kept for next time. Main queue only, like the game.
+    private let progress: Progress
+    /// Which phone each seat is, so a score can be put back where it came from.
+    private var deviceIDs: [UUID: String] = [:]
     /// The game is not thread-safe and the scene reads it every frame, so every mutation is
     /// funnelled to the main queue. Sessions arrive on arbitrary queues.
     private let queue: DispatchQueue = .main
@@ -29,8 +33,15 @@ final class GameHost: RemoteSessionHandler {
     private var sessions: [UUID: RemoteSession] = [:]
     private var lastTickSecond: Int?
 
-    init(game: Game) {
+    init(game: Game, progress: Progress) {
         self.game = game
+        self.progress = progress
+    }
+
+    /// Writes a person's score and gun to disk. Called whenever either changes.
+    private func remember(_ id: UUID) {
+        guard let player = game.players[id], !player.isBot, let device = deviceIDs[id] else { return }
+        progress.record(device, name: player.name, points: player.lifetimePoints, weapon: player.weapon)
     }
 
     /// Send a cue to one player, or to everyone when `player` is nil. Either way the room
@@ -58,7 +69,9 @@ final class GameHost: RemoteSessionHandler {
             case .destroyed(let victim, let cause, _):
                 switch cause {
                 case .shell(let by) where by == victim: Log.info("\(name(victim)) hit themself")
-                case .shell(let by): Log.info("\(name(by)) destroyed \(name(victim))")
+                case .shell(let by):
+                    Log.info("\(name(by)) destroyed \(name(victim))")
+                    remember(by)
                 case .crushed: Log.info("\(name(victim)) was crushed")
                 case .pit: Log.info("\(name(victim)) fell in")
                 }
@@ -66,7 +79,9 @@ final class GameHost: RemoteSessionHandler {
                 Log.info("\(name(player)) is out")
             case .mapChanged(let map):
                 Log.info("next map: \(map.title) — \(map.summary)")
-            case .bounced, .respawned, .expired, .brickBroken, .teleported:
+            case .unlocked(let player, let weapon):
+                Log.info("\(name(player)) unlocked the \(weapon.title) — \(weapon.summary)")
+            case .bounced, .respawned, .expired, .brickBroken, .teleported, .exploded:
                 break
             }
         }
@@ -131,7 +146,7 @@ final class GameHost: RemoteSessionHandler {
     func features(for session: RemoteSession) -> [String] {
         // No pointer, no keyboard, no media: a gamepad. Advertising only what exists lets
         // the controller hide the rest rather than offering dead UI.
-        ["pad", "fire", "ready", "modes", "bots", "difficulty", "pause"]
+        ["pad", "fire", "ready", "modes", "bots", "difficulty", "pause", "weapons"]
     }
 
     func displays(for session: RemoteSession) -> [DisplayInfo] {
@@ -151,11 +166,22 @@ final class GameHost: RemoteSessionHandler {
 
     func sessionDidBegin(_ session: RemoteSession) {
         let name = session.deviceName ?? "Player"
+        let device = session.deviceId
         queue.async { [weak self] in
             guard let self else { return }
             self.sessions[session.id] = session
-            self.game.addPlayer(id: session.id, name: name, at: Date().timeIntervalSince1970)
-            Log.info("\(name) joined — \(self.game.players.count) playing")
+            // A phone we have seen before brings its score and its gun back with it.
+            let remembered = device.flatMap { self.progress.lookup($0) }
+            if let device { self.deviceIDs[session.id] = device }
+            let player = self.game.addPlayer(id: session.id, name: name, at: Date().timeIntervalSince1970,
+                                             points: remembered?.points ?? 0, weapon: remembered?.weapon)
+            if let remembered {
+                Log.info("\(name) joined with \(remembered.points) points and the \(player.weapon.title) — \(self.game.players.count) playing")
+                self.sessions[session.id]?.send(cue: CuePayload(kind: .info, intensity: 0.4,
+                                                                text: "★\(remembered.points) · \(player.weapon.title)"))
+            } else {
+                Log.info("\(name) joined — \(self.game.players.count) playing")
+            }
             self.onRosterChange?()
         }
     }
@@ -163,6 +189,8 @@ final class GameHost: RemoteSessionHandler {
     func sessionDidEnd(_ session: RemoteSession) {
         queue.async { [weak self] in
             guard let self else { return }
+            self.remember(session.id)
+            self.deviceIDs.removeValue(forKey: session.id)
             self.sessions.removeValue(forKey: session.id)
             self.game.removePlayer(id: session.id)
             Log.info("\(session.deviceName ?? "a player") left — \(self.game.players.count) playing")
@@ -202,6 +230,9 @@ final class GameHost: RemoteSessionHandler {
             if !reshuffleMap() { refuse("Not mid-round") }
         case .d:
             if cycleDifficulty() == nil { refuse("Not mid-round") }
+        case .g:
+            guard let session else { return }
+            cycleWeapon(for: session.id)
         case .p:
             if togglePause() == nil { refuse("No round to pause") }
         case .e, .escape:
@@ -226,6 +257,22 @@ final class GameHost: RemoteSessionHandler {
         guard game.endRoundEarly(at: Date().timeIntervalSince1970) else { return false }
         Log.info("round ended early")
         return true
+    }
+
+    /// The next gun this player has unlocked, wrapping round. Tells them what it is and,
+    /// if there is only the cannon, what the next one costs.
+    func cycleWeapon(for id: UUID) {
+        guard let weapon = game.cycleWeapon(player: id), let player = game.players[id] else { return }
+        remember(id)
+        if game.unlockedWeapons(for: id).count == 1, let next = Weapon.next(after: player.lifetimePoints) {
+            emit(CuePayload(kind: .info, intensity: 0.4,
+                            text: "\(next.weapon.title) in \(next.pointsToGo) kill\(next.pointsToGo == 1 ? "" : "s")"),
+                 to: id)
+        } else {
+            Log.info("\(player.name) switched to the \(weapon.title)")
+            emit(CuePayload(kind: .info, intensity: 0.4, text: weapon.title), to: id)
+        }
+        onRosterChange?()
     }
 
     /// The next difficulty up, wrapping round. Returns it, or nil if refused.

@@ -123,3 +123,36 @@ Reticle found two bugs in AirPoint. This game found a gap rather than a bug — 
 held-button event — and one thing about the lenient payload path that was correct for every
 existing event and wrong for the new one. Neither would have been found by planning the
 protocol harder; both fell out of building a third host on it.
+
+## Why the guns are one engine
+
+Eleven guns could have been eleven kinds of projectile. They are one `Shell` with a
+`Weapon` on it and a profile the engine reads: how many, how fast, how many bounces, and a
+handful of behaviours — homing, splash, mines, ghosts. A new gun is a profile, and every
+gun inherits every fix to the physics. It also means the maps' features work on all of
+them without anyone having thought about the combination: a seeker through a portal, a
+mortar off a bumper, mines on a conveyor.
+
+## Why points are never spent
+
+"Save up for a weapon" could mean buying. It means reaching: every gun is a threshold on
+lifetime kills, and a gun reached is a gun kept. Spending would mean a player who tried the
+Railgun and disliked it is poorer for it, and a scoreboard that goes down is a scoreboard
+people stop caring about. The progress file has the same rule: a write can only raise a
+score, so a stale reconnect cannot take a kill away.
+
+## Why the cost ordering is tested
+
+Ten guns with different niches cannot be ordered by feel alone, and the claim that a
+twenty-point gun is better than a five-point one has to mean something checkable. The
+measure chosen is the one that is fair to all of them: a stationary target in the open at
+a middling distance, trigger held, time to first kill. No direct-fire gun may be slower
+than the cannon. The guns whose point is not a straight shot — scatter, mines, the nova —
+are checked for the thing they are for instead.
+
+## Why identity comes from AirPoint
+
+Persistence needs to know it is the same phone. The connection id is new every time; the
+device name is "iPhone" for everybody. The phone already generates an identity once and
+keeps it in local storage for pairing, and AirPoint 0.4.1 hands it to the host. That is
+the key, and nothing is written to the phone that was not there already.

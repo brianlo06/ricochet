@@ -43,6 +43,11 @@ final class TankLayer: SKNode {
         for shell in live {
             let node = shells[shell.id] ?? makeShell(shell)
             node.position = CGPoint(x: shell.position.x, y: shell.position.y)
+            // Anything with a front points the way it is going.
+            if shell.velocity != .zero { node.zRotation = shell.velocity.heading }
+            if shell.isMine {
+                node.alpha = now < shell.armedAt ? 0.5 : (Int(now * 3) % 2 == 0 ? 1 : 0.7)
+            }
         }
     }
 
@@ -59,18 +64,94 @@ final class TankLayer: SKNode {
         return node
     }
 
+    /// Each gun's shell looks like what it does, because at television distance the
+    /// thing coming at you has to be readable before it arrives.
     private func makeShell(_ shell: Shell) -> SKNode {
         let color = color(of: shell.owner)
         let node = SKNode()
-        let glow = SKShapeNode(circleOfRadius: 11)
-        glow.fillColor = color.withAlphaComponent(0.25)
-        glow.strokeColor = .clear
-        node.addChild(glow)
-        let core = SKShapeNode(circleOfRadius: 5)
-        core.fillColor = color
-        core.strokeColor = .white
-        core.lineWidth = 1.5
-        node.addChild(core)
+        let r = shell.radius
+        switch shell.weapon {
+        case .cannon, .volley, .scatter, .repeater, .nova:
+            let glow = SKShapeNode(circleOfRadius: r * 2.2)
+            glow.fillColor = color.withAlphaComponent(0.25)
+            glow.strokeColor = .clear
+            node.addChild(glow)
+            let core = SKShapeNode(circleOfRadius: r)
+            core.fillColor = color
+            core.strokeColor = .white
+            core.lineWidth = 1.5
+            node.addChild(core)
+        case .bouncer:
+            let core = SKShapeNode(circleOfRadius: r)
+            core.fillColor = .white
+            core.strokeColor = color
+            core.lineWidth = 2.5
+            node.addChild(core)
+            core.run(.repeatForever(.sequence([.scale(to: 1.3, duration: 0.12), .scale(to: 1, duration: 0.12)])))
+        case .railgun:
+            // A streak, not a dot: it is moving too fast to be a dot.
+            let streak = SKShapeNode(rectOf: CGSize(width: 44, height: r * 1.6), cornerRadius: r)
+            streak.fillColor = color
+            streak.strokeColor = .white
+            streak.lineWidth = 1
+            node.addChild(streak)
+        case .seeker:
+            let path = CGMutablePath()
+            path.move(to: CGPoint(x: 10, y: 0))
+            path.addLine(to: CGPoint(x: -7, y: 6))
+            path.addLine(to: CGPoint(x: -4, y: 0))
+            path.addLine(to: CGPoint(x: -7, y: -6))
+            path.closeSubpath()
+            let dart = SKShapeNode(path: path)
+            dart.fillColor = color
+            dart.strokeColor = .white
+            dart.lineWidth = 1.5
+            node.addChild(dart)
+            let flame = SKShapeNode(circleOfRadius: 3)
+            flame.fillColor = NSColor(calibratedRed: 1, green: 0.8, blue: 0.3, alpha: 0.9)
+            flame.strokeColor = .clear
+            flame.position = CGPoint(x: -9, y: 0)
+            node.addChild(flame)
+            flame.run(.repeatForever(.sequence([.scale(to: 1.6, duration: 0.08), .scale(to: 0.8, duration: 0.08)])))
+        case .mortar:
+            let body = SKShapeNode(circleOfRadius: r)
+            body.fillColor = NSColor(calibratedWhite: 0.15, alpha: 1)
+            body.strokeColor = color
+            body.lineWidth = 3
+            node.addChild(body)
+            let fuse = SKShapeNode(circleOfRadius: 2.5)
+            fuse.fillColor = NSColor(calibratedRed: 1, green: 0.5, blue: 0.2, alpha: 1)
+            fuse.strokeColor = .clear
+            fuse.position = CGPoint(x: 0, y: r + 2)
+            node.addChild(fuse)
+            fuse.run(.repeatForever(.sequence([.fadeOut(withDuration: 0.1), .fadeIn(withDuration: 0.1)])))
+        case .minelayer:
+            let ring = SKShapeNode(circleOfRadius: r)
+            ring.fillColor = NSColor(calibratedWhite: 0.1, alpha: 1)
+            ring.strokeColor = color
+            ring.lineWidth = 2.5
+            node.addChild(ring)
+            for i in 0..<4 {
+                let spike = SKShapeNode(rectOf: CGSize(width: 6, height: 2.5))
+                spike.fillColor = color
+                spike.strokeColor = .clear
+                let angle = Double(i) * .pi / 2 + .pi / 4
+                spike.position = CGPoint(x: cos(angle) * (r + 2), y: sin(angle) * (r + 2))
+                spike.zRotation = angle
+                node.addChild(spike)
+            }
+            let eye = SKShapeNode(circleOfRadius: 3)
+            eye.fillColor = .systemRed
+            eye.strokeColor = .clear
+            node.addChild(eye)
+        case .phantom:
+            let ghost = SKShapeNode(circleOfRadius: r * 1.6)
+            ghost.fillColor = color.withAlphaComponent(0.35)
+            ghost.strokeColor = color.withAlphaComponent(0.7)
+            ghost.lineWidth = 1.5
+            node.addChild(ghost)
+            ghost.run(.repeatForever(.sequence([.fadeAlpha(to: 0.4, duration: 0.25), .fadeAlpha(to: 1, duration: 0.25)])))
+        }
         node.zPosition = 12
         addChild(node)
         shells[shell.id] = node
@@ -103,6 +184,13 @@ final class TankLayer: SKNode {
                 arrive(at: CGPoint(x: to.x, y: to.y), color: NSColor(calibratedRed: 0.8, green: 0.6, blue: 1, alpha: 1))
             case .mapChanged:
                 break   // the field rebuilds itself; the HUD says the name
+            case .exploded(let at, let radius):
+                blast(at: CGPoint(x: at.x, y: at.y), radius: radius)
+            case .unlocked(let player, let weapon):
+                if let node = tanks[player] {
+                    floatText("UNLOCKED: \(weapon.title.uppercased())", at: clampedToArena(node.position),
+                              color: NSColor(calibratedRed: 1, green: 0.85, blue: 0.3, alpha: 1), size: 28)
+                }
             case .respawned(let player, let at):
                 arrive(at: CGPoint(x: at.x, y: at.y), color: color(of: player))
             case .eliminated(let player):
@@ -137,6 +225,29 @@ final class TankLayer: SKNode {
     private func clampedToArena(_ point: CGPoint) -> CGPoint {
         CGPoint(x: min(max(point.x, 90), arenaSize.width - 90),
                 y: min(max(point.y, 20), arenaSize.height - 90))
+    }
+
+    /// A blast: a flash that fills the radius and a ring that marks its edge, so whoever
+    /// was just outside it can see that they were.
+    private func blast(at point: CGPoint, radius: Double) {
+        let flash = SKShapeNode(circleOfRadius: radius)
+        flash.fillColor = NSColor(calibratedRed: 1, green: 0.7, blue: 0.3, alpha: 0.55)
+        flash.strokeColor = .clear
+        flash.position = point
+        flash.zPosition = 17
+        flash.setScale(0.2)
+        addChild(flash)
+        flash.run(.sequence([.group([.scale(to: 1, duration: 0.12), .fadeOut(withDuration: 0.3)]),
+                             .removeFromParent()]))
+        let ring = SKShapeNode(circleOfRadius: radius)
+        ring.strokeColor = NSColor(calibratedRed: 1, green: 0.5, blue: 0.2, alpha: 1)
+        ring.lineWidth = 4
+        ring.position = point
+        ring.zPosition = 17
+        ring.setScale(0.3)
+        addChild(ring)
+        ring.run(.sequence([.group([.scale(to: 1.15, duration: 0.35), .fadeOut(withDuration: 0.4)]),
+                            .removeFromParent()]))
     }
 
     private func crumble(at point: CGPoint) {

@@ -383,6 +383,12 @@ class Controller {
       Cue.unlock();
       this.send('key_press', { key: 'n' });
     });
+    // G cycles through the guns this phone's kills have unlocked. Any time, even
+    // mid-round: a loadout is the player's business.
+    $('gun').addEventListener('click', () => {
+      Cue.unlock();
+      this.send('key_press', { key: 'g' });
+    });
     // P pauses or resumes, E ends the round with the scores as they stand. Both do
     // nothing outside a round, and the host says so.
     $('pause').addEventListener('click', () => {

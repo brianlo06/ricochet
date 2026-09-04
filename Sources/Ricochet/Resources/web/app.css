@@ -95,6 +95,7 @@ body {
 .lobby-buttons { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
 .btn-mode { min-height: 44px; padding: 0 16px; font-size: 14px; }
 .btn-end { color: var(--fire); border-color: rgba(229,84,75,.5); }
+.btn-gun { color: #ffd84d; border-color: rgba(255,216,77,.5); }
 
 .btn-fire {
   justify-self: center; align-self: center;

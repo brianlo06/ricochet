@@ -78,6 +78,16 @@ public enum Feedback {
         case .mapChanged(let map):
             return [Addressed(CuePayload(kind: .info, intensity: 0.4, text: map.title))]
 
+        case .unlocked(let player, let weapon):
+            // The one moment worth the strongest success there is. The kill that earned
+            // it was already felt; this is the reward.
+            return [Addressed(CuePayload(kind: .success, intensity: 1.0, text: "Unlocked: \(weapon.title)"), to: player)]
+
+        case .exploded:
+            // Whoever it caught is told by their own destruction; the blast itself is
+            // for the television.
+            return []
+
         // A ricochet is something to watch, not to feel: four players' shells bouncing is
         // a constant patter, and a phone that buzzed for each would never stop. The same
         // goes for a brick going, a shell going through a portal, and a shell timing out.

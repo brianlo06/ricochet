@@ -64,7 +64,8 @@ public enum Scoreboard {
                           body: "\(game.mode.title.uppercased())  ·  \(game.mode.summary)"
                               + "\n\(mapLine(for: game))"
                               + "\n\(botLine)"
-                              + "\n\nDrive around while you wait  ·  Mode on your phone changes the rules",
+                              + "\n\nDrive around while you wait  ·  Mode changes the rules  ·  Gun changes your weapon"
+                              + "\n★ is your lifetime kills; every five unlocks a gun",
                           clock: "", isUrgent: false, showsJoinPanel: true)
 
         case .countdown:
@@ -120,6 +121,9 @@ public enum Scoreboard {
         } else if let lives = player.livesLeft {
             row += "   " + String(repeating: "♥", count: max(lives, 0))
         }
+        // The gun, always, and the lifetime score for people: it is what the gun cost.
+        row += "   \(player.weapon.title)"
+        if !player.isBot { row += " ★\(player.lifetimePoints)" }
         return row
     }
 }

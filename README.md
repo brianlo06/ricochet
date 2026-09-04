@@ -60,6 +60,7 @@ Alone? Press **Bots** on the phone (or **B** on the Mac) until you have company.
 | **Mode** | Cycle the rules. Refused mid-round. |
 | **Bots** | One more bot, wrapping round to none. Refused mid-round. |
 | **Skill** | How good the bots are: Easy, Medium, Hard, Impossible. Refused mid-round. |
+| **Gun** | The next gun your kills have unlocked. Any time. |
 | **Map** | Another map for the next round. Refused mid-round. |
 | **Pause** | Stops the round where it is; press again to carry on. Nothing counts while paused. |
 | **End** | Ends the round now, scores as they stand. |
@@ -128,6 +129,41 @@ A different one each round, never the same one twice running. Ten of them:
 Maps are laid out in fractions of one fixed arena and checked by the same tests: nothing off
 the edge, every spawn clear, and every spawn reachable from every other with a tank's
 radius — which for the maze means the generator cannot strand a seat behind a wall.
+
+## Guns
+
+Every kill is a point, for the round and for life. Lifetime points unlock guns, one every
+five, and the game remembers your points and your gun by phone between evenings, so you
+can save up. Nothing is spent: reach twenty and the Railgun is yours for good.
+
+| Points | Gun | What it does | The trade |
+|---|---|---|---|
+| 0 | **Cannon** | One shell, one bounce | The baseline |
+| 5 | **Scatter** | Five pellets in a fan | Devastating close up, nothing past three tank-lengths, one volley at a time |
+| 10 | **Repeater** | A stream of fast small shells | No bounces, and each wanders a little |
+| 15 | **Bouncer** | Shells come off four walls | The one gun as dangerous to you as to them |
+| 20 | **Railgun** | One very fast shell | Nearly impossible to dodge; one in the air, slow to reload |
+| 25 | **Seeker** | Missiles that turn toward the nearest tank | Slow, and they die on walls, so cover still works |
+| 30 | **Volley** | Three bouncing shells in a tight fan | A cannon and a half |
+| 35 | **Mortar** | Goes off on anything it touches; the blast catches everyone nearby | Splash goes round corners. So does yours, if you are close |
+| 40 | **Nova** | Eight shells at once, in every direction | Short-lived; a panic button |
+| 45 | **Minelayer** | Drops mines behind you, four at a time, for half a minute | They never go off for you. Reversing is another matter |
+| 50 | **Phantom** | Shells go through walls | Cover stops working |
+
+Press **Gun** on the phone to cycle through what you have unlocked, any time. The score
+row on the TV shows each player's gun and lifetime points (★). Bots carry guns to match
+their level: Hard bots bring any of the first five, Impossible bots the Railgun, Seeker,
+Volley or Phantom, and none of them are ever handed something that goes off in their own
+face.
+
+Every gun is the same shell engine with different numbers and a handful of behaviours it
+knows about — spread, homing, splash, mines, passing through walls — so one set of physics
+is under test. The balance test that holds the ordering honest: on a stationary target in
+the open, no direct-fire gun is slower to a kill than the cannon. In Ricochet mode every
+gun gets two extra bounces.
+
+Progress lives in `progress.json` beside the TLS identity in the state directory, keyed by
+the identity each phone generated when it first joined. Points only ever go up.
 
 ## Modes
 

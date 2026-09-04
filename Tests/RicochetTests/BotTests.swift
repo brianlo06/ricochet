@@ -201,6 +201,12 @@ final class BotTests: XCTestCase {
                               spawns: [Vec2(x: 200, y: 300), Vec2(x: 700, y: 300)])
             let game = Game(arena: arena)
             game.setDifficulty(level)
+            // The same gun at every level, or the comparison is of guns, not of bots. And
+            // a target that comes straight back, so what is measured is how often the
+            // bot fires and not how long it spends waiting for something to fire at.
+            game.botArmoury = [.cannon]
+            game.settings.respawnDelay = 0.01
+            game.settings.spawnShield = 0
             let a = UUID()
             game.addPlayer(id: a, name: "A", at: 0)
             game.setBots(1, at: 0)

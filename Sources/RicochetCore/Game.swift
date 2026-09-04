@@ -42,6 +42,12 @@ public struct PlayerState: Identifiable, Equatable, Sendable {
     public var livesLeft: Int?
     public var isEliminated: Bool = false
 
+    /// What this tank fires. Chosen from what `lifetimePoints` has unlocked.
+    public var weapon: Weapon = .cannon
+    /// Kills across every round and every evening, one point each. Weapons unlock on it,
+    /// and the host keeps it for the next time this phone turns up.
+    public var lifetimePoints: Int = 0
+
     public var kills: Int = 0
     public var deaths: Int = 0
     /// Destroyed by your own shell. Counted as a death, not as a kill for anybody.
@@ -69,26 +75,47 @@ public struct PlayerState: Identifiable, Equatable, Sendable {
     }
 }
 
-/// A shell in flight.
+/// A shell in flight — or a mine lying in wait, which is a shell that does not move.
 public struct Shell: Identifiable, Equatable, Sendable {
     public let id: UUID
     public let owner: UUID
+    /// What fired it, which is what decides how it behaves.
+    public let weapon: Weapon
+    /// One press of the trigger. Several shells can share one, and the limit on shells
+    /// in the air counts volleys, so a fan of five is one shot.
+    public let volley: UUID
     public var position: Vec2
     public var velocity: Vec2
     /// Walls it may still come off. When this is zero the next wall absorbs it.
     public var bouncesLeft: Int
     public let firedAt: TimeInterval
     public let expiresAt: TimeInterval
+    /// When a mine starts listening. Meaningless for anything else.
+    public let armedAt: TimeInterval
 
-    public init(id: UUID = UUID(), owner: UUID, position: Vec2, velocity: Vec2,
-                bouncesLeft: Int, firedAt: TimeInterval, expiresAt: TimeInterval) {
+    public var radius: Double { weapon.profile.shellRadius }
+    public var isMine: Bool { weapon.profile.isMine }
+
+    public init(id: UUID = UUID(), owner: UUID, weapon: Weapon = .cannon, volley: UUID = UUID(),
+                position: Vec2, velocity: Vec2, bouncesLeft: Int,
+                firedAt: TimeInterval, expiresAt: TimeInterval, armedAt: TimeInterval = 0) {
         self.id = id
         self.owner = owner
+        self.weapon = weapon
+        self.volley = volley
         self.position = position
         self.velocity = velocity
         self.bouncesLeft = bouncesLeft
         self.firedAt = firedAt
         self.expiresAt = expiresAt
+        self.armedAt = armedAt
+    }
+
+    /// The same shell, every deadline pushed on by `gap`. For resuming a pause.
+    func delayed(by gap: TimeInterval) -> Shell {
+        Shell(id: id, owner: owner, weapon: weapon, volley: volley, position: position,
+              velocity: velocity, bouncesLeft: bouncesLeft, firedAt: firedAt + gap,
+              expiresAt: expiresAt + gap, armedAt: armedAt + gap)
     }
 }
 
@@ -141,6 +168,10 @@ public final class Game {
     /// How good the bots are. Medium by default: Hard is what the first players called
     /// "a bit too good", and it is still there for them.
     public private(set) var difficulty: Difficulty = .medium
+    /// What bots may be handed, instead of the difficulty's choice. For a room that wants
+    /// every bot on the cannon, and for tests that compare bots on something other than
+    /// their guns.
+    public var botArmoury: [Weapon]?
 
     public struct Settings: Sendable {
         public var tankRadius: Double = 22
@@ -202,6 +233,10 @@ public final class Game {
         case brickBroken(Rect)
         case teleported(from: Vec2, to: Vec2)
         case mapChanged(Map)
+        /// A blast: a mortar shell going off, or a mine.
+        case exploded(at: Vec2, radius: Double)
+        /// A kill took somebody over a threshold.
+        case unlocked(player: UUID, weapon: Weapon)
     }
 
     private var rng: SeededGenerator
@@ -322,8 +357,11 @@ public final class Game {
     /// How many bots could play right now: the seats people are not in.
     public var maxBots: Int { max(0, seatLimit - humanCount) }
 
+    /// Adds a person. `points` is what the host remembers for this phone from before;
+    /// `weapon` is what they were using, kept if it is still theirs to use.
     @discardableResult
-    public func addPlayer(id: UUID, name: String, at now: TimeInterval) -> PlayerState {
+    public func addPlayer(id: UUID, name: String, at now: TimeInterval,
+                          points: Int = 0, weapon: Weapon? = nil) -> PlayerState {
         // A person arriving at a full table takes a bot's seat, not a refusal.
         if players[id] == nil, players.count >= seatLimit, let bot = highestSeatedBot() {
             removeBot(bot)
@@ -339,9 +377,38 @@ public final class Game {
         player.isReady = phase.isPlaying
         player.shieldedUntil = now + settings.spawnShield
         player.livesLeft = settings.lives > 0 ? settings.lives : nil
+        player.lifetimePoints = max(0, points)
+        if let weapon, weapon.cost <= player.lifetimePoints { player.weapon = weapon }
         players[id] = player
         reconcileBots(at: now)
         return player
+    }
+
+    // MARK: Weapons
+
+    /// Everything this player has unlocked, cheapest first.
+    public func unlockedWeapons(for id: UUID) -> [Weapon] {
+        Weapon.unlocked(with: players[id]?.lifetimePoints ?? 0)
+    }
+
+    /// Switches weapon. Allowed any time — a loadout is the player's business, not the
+    /// round's — but only to something their points have unlocked.
+    @discardableResult
+    public func setWeapon(player id: UUID, _ weapon: Weapon) -> Bool {
+        guard let player = players[id], weapon.cost <= player.lifetimePoints else { return false }
+        players[id]?.weapon = weapon
+        return true
+    }
+
+    /// The next unlocked weapon along, wrapping to the cannon. Returns it, or nil for
+    /// nobody.
+    public func cycleWeapon(player id: UUID) -> Weapon? {
+        guard let player = players[id] else { return nil }
+        let choices = unlockedWeapons(for: id)
+        let index = choices.firstIndex(of: player.weapon) ?? 0
+        let next = choices[(index + 1) % choices.count]
+        players[id]?.weapon = next
+        return next
     }
 
     private func lowestFreeSeat() -> Int {
@@ -386,11 +453,7 @@ public final class Game {
         } else {
             phase = resuming
         }
-        shells = shells.map { shell in
-            Shell(id: shell.id, owner: shell.owner, position: shell.position,
-                  velocity: shell.velocity, bouncesLeft: shell.bouncesLeft,
-                  firedAt: shell.firedAt + gap, expiresAt: shell.expiresAt + gap)
-        }
+        shells = shells.map { $0.delayed(by: gap) }
         for (id, player) in players {
             var moved = player
             if let due = moved.respawnAt { moved.respawnAt = due + gap }
@@ -477,6 +540,19 @@ public final class Game {
         bot.isReady = true
         bot.shieldedUntil = now + settings.spawnShield
         bot.livesLeft = settings.lives > 0 ? settings.lives : nil
+        // Harder bots bring better guns. Never the ones that go off in their own faces:
+        // a bot that mortars itself is not a challenge, it is a bug report.
+        let armoury: [Weapon]
+        if let chosen = botArmoury, !chosen.isEmpty {
+            armoury = chosen
+        } else {
+            switch difficulty {
+            case .easy, .medium: armoury = [.cannon]
+            case .hard: armoury = [.cannon, .scatter, .repeater, .bouncer, .railgun]
+            case .impossible: armoury = [.railgun, .seeker, .volley, .phantom]
+            }
+        }
+        bot.weapon = armoury.randomElement(using: &rng) ?? .cannon
         players[id] = bot
         brains[id] = BotBrain(seed: rng.next())
     }
@@ -514,26 +590,48 @@ public final class Game {
     public func fire(player id: UUID, at now: TimeInterval) -> TriggerResult {
         guard var player = players[id] else { return .noSuchPlayer }
         guard player.isAlive, !player.isEliminated else { return .refused(.destroyed) }
-        if let last = lastShotAt[id], now - last < settings.fireCooldown { return .refused(.tooSoon) }
-        guard shells.filter({ $0.owner == id }).count < settings.shellsInFlight else {
-            return .refused(.outOfShells)
-        }
+        let weapon = player.weapon
+        let profile = weapon.profile
+        if let last = lastShotAt[id], now - last < profile.cooldown { return .refused(.tooSoon) }
+        let volleysOut = Set(shells.filter { $0.owner == id }.map(\.volley)).count
+        guard volleysOut < profile.volleysInFlight else { return .refused(.outOfShells) }
         lastShotAt[id] = now
         player.shots += 1
         // A shield is for arriving, not for fighting from behind. The first shot drops it.
         player.shieldedUntil = 0
 
-        let direction = Vec2(heading: player.heading)
-        // Out past the hull, so a shell never starts inside the tank that fired it. It can
-        // still come straight back off a wall you are hugging, which is the game.
-        let muzzle = player.position + direction * (settings.tankRadius + settings.shellRadius + 2)
-        let shell = Shell(owner: id, position: muzzle,
-                          velocity: direction * settings.shellSpeed,
-                          bouncesLeft: settings.shellBounces,
-                          firedAt: now, expiresAt: now + settings.shellLifetime)
-        shells.append(shell)
+        let volley = UUID()
+        // The mode's bounce count is relative to the cannon's one: Ricochet adds two to
+        // whatever the gun has, and a mode with none takes the cannon's away.
+        let extraBounces = settings.shellBounces - Weapon.cannon.profile.bounces
+        var first: UUID?
+        if profile.isMine {
+            // Dropped behind, so driving on is safe and reversing is not.
+            let behind = player.position - Vec2(heading: player.heading) * (settings.tankRadius + profile.shellRadius + 4)
+            let mine = Shell(owner: id, weapon: weapon, volley: volley, position: behind, velocity: .zero,
+                             bouncesLeft: 0, firedAt: now, expiresAt: now + profile.lifetime,
+                             armedAt: now + profile.armDelay)
+            shells.append(mine)
+            first = mine.id
+        } else {
+            for offset in profile.spread {
+                let error = profile.jitter > 0
+                    ? Double.random(in: -profile.jitter...profile.jitter, using: &rng) * .pi / 180 : 0
+                let direction = Vec2(heading: player.heading + offset + error)
+                // Out past the hull, so a shell never starts inside the tank that fired it.
+                // It can still come straight back off a wall you are hugging, which is
+                // the game.
+                let muzzle = player.position + direction * (settings.tankRadius + profile.shellRadius + 2)
+                let shell = Shell(owner: id, weapon: weapon, volley: volley, position: muzzle,
+                                  velocity: direction * profile.shellSpeed,
+                                  bouncesLeft: max(0, profile.bounces + extraBounces),
+                                  firedAt: now, expiresAt: now + profile.lifetime)
+                shells.append(shell)
+                if first == nil { first = shell.id }
+            }
+        }
         players[id] = player
-        return .fired(shellID: shell.id)
+        return .fired(shellID: first ?? volley)
     }
 
     // MARK: - Simulation
@@ -626,6 +724,9 @@ public final class Game {
             fresh.isBot = player.isBot
             fresh.isReady = true
             fresh.livesLeft = settings.lives > 0 ? settings.lives : nil
+            // A round resets the evening's score, never the lifetime one or the gun.
+            fresh.weapon = player.weapon
+            fresh.lifetimePoints = player.lifetimePoints
             // What they are holding carries over: a thumb already on the pad when the
             // countdown ends should move the tank on the first frame.
             fresh.controls = player.controls
@@ -826,57 +927,109 @@ public final class Game {
     private func moveShells(by dt: Double, at now: TimeInterval) -> [Event] {
         var events: [Event] = []
         var kept: [Shell] = []
-        let r = settings.shellRadius
 
         for var shell in shells {
+            let profile = shell.weapon.profile
+            let r = profile.shellRadius
+
             if now >= shell.expiresAt {
-                events.append(.expired(shell: shell.id, at: shell.position))
+                if profile.blastRadius > 0, !profile.isMine {
+                    events += explode(shell, at: now)
+                } else {
+                    events.append(.expired(shell: shell.id, at: shell.position))
+                }
                 continue
             }
+
+            // A mine lies where it was dropped and listens.
+            if profile.isMine {
+                if now >= shell.armedAt, players.values.contains(where: {
+                    $0.id != shell.owner && $0.isAlive && !$0.isShielded(at: now)
+                        && $0.position.distance(to: shell.position) < settings.tankRadius + profile.blastRadius * 0.6
+                }) {
+                    events += explode(shell, at: now)
+                } else {
+                    kept.append(shell)
+                }
+                continue
+            }
+
+            // A homing shell turns toward the nearest tank it can find, a little each step.
+            if profile.homingTurn > 0 {
+                let target = players.values
+                    .filter { $0.id != shell.owner && $0.isAlive && !$0.isShielded(at: now)
+                        && $0.position.distance(to: shell.position) < profile.homingRange }
+                    .min { $0.position.distance(to: shell.position) < $1.position.distance(to: shell.position) }
+                if let target {
+                    let wanted = (target.position - shell.position).heading
+                    let current = shell.velocity.heading
+                    let diff = Self.wrap(wanted - current)
+                    let turn = min(max(diff, -profile.homingTurn * dt), profile.homingTurn * dt)
+                    shell.velocity = Vec2(heading: current + turn) * shell.velocity.length
+                }
+            }
+
             shell.position += shell.velocity * dt
 
-            // A brick takes the shell with it.
-            if let index = arena.bricks.firstIndex(where: { $0.intersects(center: shell.position, radius: r) }) {
-                let brick = arena.bricks.remove(at: index)
-                events.append(.brickBroken(brick))
-                events.append(.expired(shell: shell.id, at: shell.position))
-                continue
-            }
+            var struck = false   // something solid: a wall, a brick, the border
+            var absorbed = false // and it is not coming back off it
 
-            var bounced = false
-            // The border first, then the blocks. Each is a reflection about one axis: the
-            // one the shell is more deeply through, which for a moving shell is the face
-            // it came in by.
-            if shell.position.x - r < 0 {
-                shell.position.x = r; shell.velocity.x = abs(shell.velocity.x); bounced = true
-            } else if shell.position.x + r > arena.width {
-                shell.position.x = arena.width - r; shell.velocity.x = -abs(shell.velocity.x); bounced = true
-            }
-            if shell.position.y - r < 0 {
-                shell.position.y = r; shell.velocity.y = abs(shell.velocity.y); bounced = true
-            } else if shell.position.y + r > arena.height {
-                shell.position.y = arena.height - r; shell.velocity.y = -abs(shell.velocity.y); bounced = true
-            }
-            for wall in currentSolids where wall.intersects(center: shell.position, radius: r) {
-                let depthX = min(shell.position.x + r - wall.minX, wall.maxX - (shell.position.x - r))
-                let depthY = min(shell.position.y + r - wall.minY, wall.maxY - (shell.position.y - r))
-                if depthX < depthY {
-                    if shell.position.x < wall.center.x {
-                        shell.position.x = wall.minX - r; shell.velocity.x = -abs(shell.velocity.x)
-                    } else {
-                        shell.position.x = wall.maxX + r; shell.velocity.x = abs(shell.velocity.x)
-                    }
+            if profile.isGhost {
+                // Through everything but the edge of the world.
+                if shell.position.x - r < 0 || shell.position.x + r > arena.width
+                    || shell.position.y - r < 0 || shell.position.y + r > arena.height {
+                    struck = true
+                    absorbed = true
+                }
+            } else {
+                // A brick takes the shell with it.
+                if let index = arena.bricks.firstIndex(where: { $0.intersects(center: shell.position, radius: r) }) {
+                    let brick = arena.bricks.remove(at: index)
+                    events.append(.brickBroken(brick))
+                    struck = true
+                    absorbed = true
                 } else {
-                    if shell.position.y < wall.center.y {
-                        shell.position.y = wall.minY - r; shell.velocity.y = -abs(shell.velocity.y)
-                    } else {
-                        shell.position.y = wall.maxY + r; shell.velocity.y = abs(shell.velocity.y)
+                    // The border first, then the blocks. Each is a reflection about one
+                    // axis: the one the shell is more deeply through, which for a moving
+                    // shell is the face it came in by.
+                    if shell.position.x - r < 0 {
+                        shell.position.x = r; shell.velocity.x = abs(shell.velocity.x); struck = true
+                    } else if shell.position.x + r > arena.width {
+                        shell.position.x = arena.width - r; shell.velocity.x = -abs(shell.velocity.x); struck = true
+                    }
+                    if shell.position.y - r < 0 {
+                        shell.position.y = r; shell.velocity.y = abs(shell.velocity.y); struck = true
+                    } else if shell.position.y + r > arena.height {
+                        shell.position.y = arena.height - r; shell.velocity.y = -abs(shell.velocity.y); struck = true
+                    }
+                    for wall in currentSolids where wall.intersects(center: shell.position, radius: r) {
+                        let depthX = min(shell.position.x + r - wall.minX, wall.maxX - (shell.position.x - r))
+                        let depthY = min(shell.position.y + r - wall.minY, wall.maxY - (shell.position.y - r))
+                        if depthX < depthY {
+                            if shell.position.x < wall.center.x {
+                                shell.position.x = wall.minX - r; shell.velocity.x = -abs(shell.velocity.x)
+                            } else {
+                                shell.position.x = wall.maxX + r; shell.velocity.x = abs(shell.velocity.x)
+                            }
+                        } else {
+                            if shell.position.y < wall.center.y {
+                                shell.position.y = wall.minY - r; shell.velocity.y = -abs(shell.velocity.y)
+                            } else {
+                                shell.position.y = wall.maxY + r; shell.velocity.y = abs(shell.velocity.y)
+                            }
+                        }
+                        struck = true
                     }
                 }
-                bounced = true
             }
-            if bounced {
-                guard shell.bouncesLeft > 0 else {
+
+            if struck {
+                // Something that goes off does so on the first thing it touches.
+                if profile.blastRadius > 0 {
+                    events += explode(shell, at: now)
+                    continue
+                }
+                if absorbed || shell.bouncesLeft == 0 {
                     events.append(.expired(shell: shell.id, at: shell.position))
                     continue
                 }
@@ -884,12 +1037,14 @@ public final class Game {
                 events.append(.bounced(shell: shell.id, at: shell.position))
             }
 
-            // A bumper reflects along the normal and, unlike a wall, costs nothing.
-            for bumper in arena.bumpers where shell.position.distance(to: bumper.center) < bumper.radius + r {
-                let normal = (shell.position - bumper.center).normalized
-                shell.velocity = shell.velocity - normal * (2 * shell.velocity.dot(normal))
-                shell.position = bumper.center + normal * (bumper.radius + r)
-                events.append(.bounced(shell: shell.id, at: shell.position))
+            if !profile.isGhost {
+                // A bumper reflects along the normal and, unlike a wall, costs nothing.
+                for bumper in arena.bumpers where shell.position.distance(to: bumper.center) < bumper.radius + r {
+                    let normal = (shell.position - bumper.center).normalized
+                    shell.velocity = shell.velocity - normal * (2 * shell.velocity.dot(normal))
+                    shell.position = bumper.center + normal * (bumper.radius + r)
+                    events.append(.bounced(shell: shell.id, at: shell.position))
+                }
             }
 
             for portal in arena.portals {
@@ -907,12 +1062,32 @@ public final class Game {
                     && $0.position.distance(to: shell.position) < settings.tankRadius + r }
                 .min { $0.position.distance(to: shell.position) < $1.position.distance(to: shell.position) }
             if let victim {
-                events += destroy(victim.id, cause: .shell(owner: shell.owner), at: now)
+                if profile.blastRadius > 0 {
+                    events += explode(shell, at: now)
+                } else {
+                    events += destroy(victim.id, cause: .shell(owner: shell.owner), at: now)
+                }
                 continue
             }
             kept.append(shell)
         }
         shells = kept
+        return events
+    }
+
+    /// A shell goes off: everything alive within its radius is destroyed, the owner
+    /// included — except by their own mine, which knows whose it is.
+    private func explode(_ shell: Shell, at now: TimeInterval) -> [Event] {
+        let profile = shell.weapon.profile
+        var events: [Event] = [.exploded(at: shell.position, radius: profile.blastRadius)]
+        let caught = orderedPlayerIDs.filter { id in
+            guard let p = players[id], p.isAlive, !p.isShielded(at: now) else { return false }
+            if profile.isMine && id == shell.owner { return false }
+            return p.position.distance(to: shell.position) < profile.blastRadius + settings.tankRadius
+        }
+        for id in caught {
+            events += destroy(id, cause: .shell(owner: shell.owner), at: now)
+        }
         return events
     }
 
@@ -927,11 +1102,20 @@ public final class Game {
             if case .shell(let shooterID) = cause {
                 if shooterID == victimID {
                     victim.ownGoals += 1
-                } else {
-                    // The shooter may have left since firing. Their shell still counts
-                    // against you; it just counts for nobody.
-                    players[shooterID]?.kills += 1
+                } else if var shooter = players[shooterID] {
+                    shooter.kills += 1
+                    // A point for the evening's score, and one for life. Bots have no
+                    // life to speak of; their guns come with the difficulty.
+                    if !shooter.isBot {
+                        shooter.lifetimePoints += 1
+                        if let weapon = Weapon.newlyUnlocked(at: shooter.lifetimePoints) {
+                            events.append(.unlocked(player: shooterID, weapon: weapon))
+                        }
+                    }
+                    players[shooterID] = shooter
                 }
+                // Otherwise the shooter has left since firing. Their shell still counts
+                // against you; it just counts for nobody.
             }
             if let lives = victim.livesLeft {
                 victim.livesLeft = lives - 1
